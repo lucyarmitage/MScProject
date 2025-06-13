@@ -1,60 +1,23 @@
 %% Magnetic Resonance Fingerprinting reconstruction code
-% SUMMARY: Code shows one example of an in-vivo abdominal MRF
-% reconstruction on a 1.5T MR-linac. Reconstruction includes, dictionary
-% generation and mrf reconstruction.
-%
-% Notes:
-%  - Make sure you have write permission in the working directory
-%  - You must have BART version 0.4.04 or higher, otherwhise no support for
-%       pics temporal base.
-%  - The code for the GIRF corrections is not included in the script yet.
-%  - The dictionary generation code is slow, on my own machine I use Julia based code, which I am not able to provide. 
-% 
-% Dependencies: 
-%  - I use some code from Jakob's Asslaender's repository on low-rank ADMM
-%  MRF: https://bitbucket.org/asslaender/nyu_mrf_recon/src/master/
-%  - The BART toolbox from berkeley: https://bitbucket.org/asslaender/nyu_mrf_recon/src/master/
-%  - Extended phase graph code from M. Weigel: http://epg.matthias-weigel.net/
-%
-% If you find this code useful please cite:
-%   Bruijnen, T., van der Heide, O., Intven, M. P. W., Mook, S., Lagendijk, J. J. W., van den Berg, C. A. T., & Tijssen, R. H. N. (2020).
-%   Technical feasibility of Magnetic Resonance Fingerprinting on a 1.5T MRI-Linac.
-%   Phys Med Biol. 2020 Sep 25. doi: 10.1088/1361-6560/abbb9d. Epub ahead of print. PMID: 32977318.
-%
-% Contact: T.Bruijnen@umcutrecht.nl | University Medical Center Utrecht
-% Department of Radiotherapy, University Medical Center Utrecht, Utrecht, the Netherlands
-% Computational Imaging Group for MRI diagnostics and therapy, Centre for
-% Image Sciences, University Medical Center Utrecht, Utrecht, The Netherlands
-%
-% Init: T.Bruijnen - 20200101
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+% ... Using data from Philips scanner 
 
 %% Initialize paths, check for bart toolbox and load data
 
 % Required: BART (installed in WSL)
-%bart_loc = '/home/mnuixe/BART/bart-0.8.00/'; % Make sure this ends with a forward slash
-%bart_loc = '/home/awetscherek/bart-0.8.00/'; % Make sure this ends with a forward slash
 bart_loc = '/mnt/c/Users/lucya/MSC_PROJECT/bart/';
 
-
 % matlab folder of BART contains a script to call BART in WSL
-%addpath(genpath('D:\Codes\MATLAB\bart-0.8.00\matlab\'))
-%addpath(genpath('G:/My Drive/MATLAB/bart-master/matlab/'))
 addpath(genpath('C:/Users/lucya/MSC_PROJECT/bart/matlab/'));
 setenv('TOOLBOX_PATH',bart_loc);
-
 
 % check if bart toolbox is installed
 if ~isempty(which('bart')); else;disp('>> BART toolbox not found in path. Please check BART path.');end
 
 % add the "utils" subfolder to the PATH:
-%addpath(genpath('C:/Codes/MATLAB/MRF/mrf-mrl-master/'))
-%addpath(genpath('C:/data/MRFData_Lucy/CodeMATLAB/utils'))
 addpath(genpath('C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/CodeMATLAB/utils'));
 
 % folder that contains the raw data:
-%folder = 'D:\1_Data\2025\Article1\Phantom\Data\Session1\';
-%folder = 'C:/data/MRFData_Lucy/';
 folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
 
 %% Load data  
@@ -63,35 +26,33 @@ data = loadRawKspacePhilips([folder 'raw_001.list']);
 % raw data and image dimensions (according to .list file):
 Nkx = abs(data.kspace_properties.kx_range(2) - data.kspace_properties.kx_range(1)) + 1;
 Nky = abs(data.kspace_properties.ky_range(2) - data.kspace_properties.ky_range(1)) + 1;
-% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;
+% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;  % ... if 3D acquisition?  
 Nx = abs(data.kspace_properties.X_range(2) - data.kspace_properties.X_range(1)) + 1;
 Ny = abs(data.kspace_properties.Y_range(2) - data.kspace_properties.Y_range(1)) + 1;
 % Nz = abs(data.kspace_properties.Z_range(2) - data.kspace_properties.Z_range(1)) + 1;
 Nc  = numel(unique(data.chan));
 % dyn=numel(unique(data.dyn));
-dyn=1;
+dyn=1;      % ...Should this match number of frames in scan?
 neco = data.kspace_properties.number_of_echoes;
 slices=numel(unique(data.loca));
 
-%prompt = "What is the distance of the slice from the isocentre (in mm)? ";
-%distanceSlice = input(prompt); % I think for this data set it should be 0 here ...
-%distanceSlice = distanceSlice/1000;
 distanceSlice = 0;
 
-% extract noise adjustment data:
+% extract noise adjustment data:       ... COME BACK TO THIS
 noise = complex(zeros(numel(data.complexdata{find(cell2mat(data.typ) == 'NOI', 1)}), Nc));
-for ii = 1:numel(data.complexdata)
-    if strcmp(data.typ{ii}, 'NOI')
+for ii = 1:numel(data.complexdata)    % ... Loops over every line of raw data
+    if strcmp(data.typ{ii}, 'NOI')    % ... Lines marked noise
         noise(:, data.chan(ii) + 1) = data.complexdata{ii};
     end
 end
 
-% put raw data in more useful structure. ky index is problematic, we use the knowledge about the
-% order in which k-space data is acquired:
-raw = complex(zeros(Nkx,Nc,Nky,dyn));
-for ii = 1:(numel(data.complexdata))
-    if strcmp(data.typ{ii}, 'STD')
-               raw(:,  data.chan(ii)+1, data.ky(ii) +1 ,data.dyn(ii)+1) = data.complexdata{ii};
+
+% ... ?
+% put raw data in more useful structure. ky index is problematic, we use the knowledge about the order in which k-space data is acquired:
+raw = complex(zeros(Nkx,Nc,Nky,dyn));   % ... Empty 4D complex array to hold raw data
+for ii = 1:(numel(data.complexdata))    % ... Loops over every line of raw data
+    if strcmp(data.typ{ii}, 'STD')     % ... Lines marked standard
+               raw(:,  data.chan(ii)+1, data.ky(ii) +1 ,data.dyn(ii)+1) = data.complexdata{ii};   % ... Insert line of data into 4D array
     end
 end
 
@@ -101,13 +62,7 @@ U.RawKspaceData= permute(U.RawKspaceData,[1 3 4 2]);
 U.RawKspaceData = noise_prewhitening(U.RawKspaceData,noise);
 kdim            = c12d(size(U.RawKspaceData));
 
-%prompt = "What is the slice orientation (1- coronal, 2- transverse, 3- sagittal)? ";
-%sliceOrientation = input(prompt); % for the example data here, this should be coronal (based on the DICOM attribute Image Position Patient 1/0/0/0/0/-1)
-sliceOrientation = 1;
-
-%if sliceOrientation ~= 1 && sliceOrientation ~= 2 && sliceOrientation ~= 3 
-   %disp("Wrong entry");
-%end 
+sliceOrientation = 1; % Coronal
 
 kx_GIRF = fread(fopen([folder 'kx_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
 ky_GIRF = fread(fopen([folder 'ky_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
@@ -120,24 +75,12 @@ trajy_GIRF = reshape(ky_GIRF,[Nkx,Nky*dyn]);
 trajz_GIRF = reshape(kz_GIRF,[Nkx,Nky*dyn]);
 b0_GIRF = reshape(b0_GIRF,[Nkx,Nky*dyn]);
 
-if sliceOrientation == 1 
-    trajx_GIRF = trajx_GIRF * 2 * pi * distanceSlice; % put the output of the GIRF in rad (for coronal slice)
-    trajGIRF(1,:,:)= trajz_GIRF; 
-    trajGIRF(2,:,:) = trajy_GIRF;
-    trajGIRF(3,:,:) = 0;
-elseif sliceOrientation == 2
-    trajz_GIRF = trajz_GIRF * 2 * pi * distanceSlice; % put the output of the GIRF in rad (for transverse slice)
-    trajGIRF(1,:,:)= trajx_GIRF;  
-    trajGIRF(2,:,:) = trajy_GIRF;
-    trajGIRF(3,:,:) = 0;
-elseif sliceOrientation == 3
-    trajy_GIRF = trajy_GIRF * 2 * pi * distanceSlice; % put the output of the GIRF in rad (for sagittal slice)
-    trajGIRF(1,:,:)= trajx_GIRF; 
-    trajGIRF(2,:,:) = trajz_GIRF;
-    trajGIRF(3,:,:) = 0;
-else 
-    disp('An error occured')
-end
+% Coronal slice
+trajx_GIRF = trajx_GIRF * 2 * pi * distanceSlice; % put the output of the GIRF in rad (for coronal slice)
+trajGIRF(1,:,:)= trajz_GIRF; 
+trajGIRF(2,:,:) = trajy_GIRF;
+trajGIRF(3,:,:) = 0;
+
 
 trajGIRF        = repmat(trajGIRF,[1 1 1 1 kdim(6)]);
 dcf             = permute(radial_density(trajGIRF(:,:,:,:,1)),[1 2 3 5 4]);
@@ -181,33 +124,29 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 %% Dictionary 
 
 % loading dictionary from MATLAB file (5865 entries):
-%load D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat
-%load D_IDX_SP_Phantom2025.mat % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
-
-folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
+% Each entry is time-series signal for specific combination of parameters
 load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
-load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));
-
+load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
 
 % alternatively: the dictionary with B1:
-%load Dictionary_B1_SP.mat
 load(fullfile(folder, 'Dictionary_B1_SP.mat'));
 
 
-dict0 = dict0(1:1000*dyn,:);
-[~,s,~]=svd((dict0),'econ');
+dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
+[~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
 result_s    = diag(s);
 NRJ= zeros(100,1);
-for R = 1:100
+for R = 1:100    % ... Energy retained in first R modes
     NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
 end
 
-%R = find(NRJ>=0.999,1);
-R = 20;  % Try 10–30 to start small
+%R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
+R = find(NRJ>=0.997,1);
+disp(R)
 
 % dict must be under the form timeFrame * parameters combinations
-[D] = compression_mrf_dictionary(dict0,idx, R);
-%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg 
+[D] = compression_mrf_dictionary(dict0,idx, R);       % ... Compressing dictionary
+%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg       % ???
 
 % First write all the cfl/hdr files in the correct dimensions for BART
 writecfl('csm',single(csm));
@@ -217,17 +156,15 @@ writecfl('dcf',permute(sqrt(dcf),[5 1 3 4 6 2]));
 writecfl('kdata',permute(U.RawKspaceData,[3 1 5 4 6 2]));
 
 % LR inversion parameters
-lambda = 0.05;
-n_iter = 50;
+lambda = 0.05;    % ...Regularisation weight
+n_iter = 50;    % ... Iteration count 
 
 % Reconstruct singular value images with BART
-tic 
-% for me this line did not work, I had to add [], but I might be using an
-% old wrapper script ...
+tic      % ... Timing 
+% for me this line did not work, I had to add [], but I might be using an old wrapper script ...
 %recon = bart('bart pics -d1 -e -l1 -r ',num2str(lambda),' -i',num2str(n_iter),' -p ','dcf',' ',' -t ','traj',' ','-B ','u',' ','kdata',' ','csm');
 cmd = sprintf('pics -d1 -e -l1 -r %f -i %d -p dcf -t traj -B u kdata csm', lambda, n_iter);
-recon = bart(cmd);
-
+recon = bart(cmd);   % ... Outputs complex valued image of shape [N, N, R]
 
 writecfl('recon',single(recon));
 toc 
@@ -241,48 +178,47 @@ idx2 = zeros([size(match_images,1) 1],'single');
 if B1correct ~= 1 && B1correct ~= 0
    disp("Wrong entry");
 elseif B1correct == 1
-    B1   = [0.8:0.02:0.9, 0.91:0.01:1.09, 1.10:0.02:1.2] ;
+    B1   = [0.8:0.02:0.9, 0.91:0.01:1.09, 1.10:0.02:1.2] ;    % ... Range of B1 scaling factors
     % need to specify the folder for the B1 map...
-    %folderB1 = 'D:\1_Data\2025\Article1\Phantom\Data\Session1\DICOM\';
-    folderB1 = 'C:/data/MRFData_Lucy/DICOM/';
+    folderB1 = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/DICOM/';
     mapB1 = double(dicomread([folderB1 'IM_0101']));
     info_mapB1 = dicominfo([folderB1 'IM_0101']);
-    
+
     mapB1_FP = mapB1/info_mapB1.Private_2005_100e  -  info_mapB1.Private_2005_100d/info_mapB1.Private_2005_100e;
     mapB1_percent = mapB1_FP/100; % Map on which I want to apply the transformation
-    
+
     % Interpolate to get the same size as the MRF images 
     sz_for_registration = size(mapB1_percent);
     x_before = 1:sz_for_registration(1);
     y_before = 1:sz_for_registration(2);
-    
+
     F_mapB1percent = griddedInterpolant({x_before,y_before},double(mapB1_percent),'nearest');
-    
+
     x_after = (0:2.0726:256)'; %From 256 to 124  %From 128 to 124:  1.03876
     y_after = (0:2.0726:256)';
-   
+
     % x_after = (0:1.0827:432)'; %From 256 to 124  %From 128 to 124:  1.03876
     % y_after = (0:1.0827:432)';
 
     resized_B1_map_percent = (F_mapB1percent({x_after,y_after}));
     resized_B1_map_percent = fliplr(flip(resized_B1_map_percent));
     resized_B1_map_percent = fliplr(resized_B1_map_percent); %% yes for phantom
-    
+
     %Dictionary match on singular value images
-    
+
     resized_B1_map_percent = reshape(resized_B1_map_percent, N^2,1);
-    
+
     B1D = double(D.lookup_table');
     nbB1 = size(B1D,2)/size(B1,2);
-    
+
     diff = single(zeros(size(B1D(3,:))));
     indices = single(zeros(1,nbB1));
-    
+
     for n = 1 : N^2
         diff = abs(B1D(3,:)-resized_B1_map_percent(n));
         b11 = min(abs(B1D(3,:)-resized_B1_map_percent(n)));
         indices(1,:)= find(diff == b11);
-    
+
         [c(n,1),idx2(n,1)] = max(match_images(n,:) * conj(D.magnetization(:,indices)), [], 2);
         idx2(n,1) = indices (idx2(n,1));
     end
