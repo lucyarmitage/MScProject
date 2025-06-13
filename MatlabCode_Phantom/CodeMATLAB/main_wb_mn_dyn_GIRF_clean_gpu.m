@@ -1,24 +1,28 @@
 %% Magnetic Resonance Fingerprinting reconstruction code
 
-% ... Using data from Philips scanner 
-
 %% Initialize paths, check for bart toolbox and load data
 
 % Required: BART (installed in WSL)
-bart_loc = '/mnt/c/Users/lucya/MSC_PROJECT/bart/';
+%bart_loc = '/mnt/c/Users/lucya/MSC_PROJECT/bart/';
+bart_loc = '/homes/la724/bart/';
 
 % matlab folder of BART contains a script to call BART in WSL
-addpath(genpath('C:/Users/lucya/MSC_PROJECT/bart/matlab/'));
+%addpath(genpath('C:/Users/lucya/MSC_PROJECT/bart/matlab/'));
+addpath(genpath('/homes/la724/bart/matlab/'));
+
 setenv('TOOLBOX_PATH',bart_loc);
 
 % check if bart toolbox is installed
 if ~isempty(which('bart')); else;disp('>> BART toolbox not found in path. Please check BART path.');end
 
 % add the "utils" subfolder to the PATH:
-addpath(genpath('C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/CodeMATLAB/utils'));
+%addpath(genpath('C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/CodeMATLAB/utils'));
+addpath(genpath('/homes/la724/MatlabCode_Phantom/CodeMATLAB/utils'));
 
 % folder that contains the raw data:
-folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
+%folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
+folder = '/homes/la724/MatlabCode_Phantom/';
+
 
 %% Load data  
 data = loadRawKspacePhilips([folder 'raw_001.list']);
@@ -26,33 +30,31 @@ data = loadRawKspacePhilips([folder 'raw_001.list']);
 % raw data and image dimensions (according to .list file):
 Nkx = abs(data.kspace_properties.kx_range(2) - data.kspace_properties.kx_range(1)) + 1;
 Nky = abs(data.kspace_properties.ky_range(2) - data.kspace_properties.ky_range(1)) + 1;
-% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;  % ... if 3D acquisition?  
+% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;
 Nx = abs(data.kspace_properties.X_range(2) - data.kspace_properties.X_range(1)) + 1;
 Ny = abs(data.kspace_properties.Y_range(2) - data.kspace_properties.Y_range(1)) + 1;
 % Nz = abs(data.kspace_properties.Z_range(2) - data.kspace_properties.Z_range(1)) + 1;
 Nc  = numel(unique(data.chan));
 % dyn=numel(unique(data.dyn));
-dyn=1;      % ...Should this match number of frames in scan?
+dyn=1;
 neco = data.kspace_properties.number_of_echoes;
 slices=numel(unique(data.loca));
 
 distanceSlice = 0;
 
-% extract noise adjustment data:       ... COME BACK TO THIS
+% extract noise adjustment data:
 noise = complex(zeros(numel(data.complexdata{find(cell2mat(data.typ) == 'NOI', 1)}), Nc));
-for ii = 1:numel(data.complexdata)    % ... Loops over every line of raw data
-    if strcmp(data.typ{ii}, 'NOI')    % ... Lines marked noise
+for ii = 1:numel(data.complexdata)
+    if strcmp(data.typ{ii}, 'NOI')
         noise(:, data.chan(ii) + 1) = data.complexdata{ii};
     end
 end
 
-
-% ... ?
 % put raw data in more useful structure. ky index is problematic, we use the knowledge about the order in which k-space data is acquired:
-raw = complex(zeros(Nkx,Nc,Nky,dyn));   % ... Empty 4D complex array to hold raw data
-for ii = 1:(numel(data.complexdata))    % ... Loops over every line of raw data
-    if strcmp(data.typ{ii}, 'STD')     % ... Lines marked standard
-               raw(:,  data.chan(ii)+1, data.ky(ii) +1 ,data.dyn(ii)+1) = data.complexdata{ii};   % ... Insert line of data into 4D array
+raw = complex(zeros(Nkx,Nc,Nky,dyn));
+for ii = 1:(numel(data.complexdata))
+    if strcmp(data.typ{ii}, 'STD')
+               raw(:,  data.chan(ii)+1, data.ky(ii) +1 ,data.dyn(ii)+1) = data.complexdata{ii};
     end
 end
 
@@ -62,7 +64,7 @@ U.RawKspaceData= permute(U.RawKspaceData,[1 3 4 2]);
 U.RawKspaceData = noise_prewhitening(U.RawKspaceData,noise);
 kdim            = c12d(size(U.RawKspaceData));
 
-sliceOrientation = 1; % Coronal
+sliceOrientation = 1;
 
 kx_GIRF = fread(fopen([folder 'kx_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
 ky_GIRF = fread(fopen([folder 'ky_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
@@ -113,8 +115,8 @@ else
     disp('An error occured')
 end
 
-prompt = "Is there a B1 correction (1- Yes, 0- No)? ";
-B1correct = input(prompt);
+%prompt = "Is there a B1 correction (1- Yes, 0- No)? ";
+B1correct = 0;
 
 % Reconstruct multi-channel images to estimate CSM
 nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4])); %Phantom 0.25
@@ -124,55 +126,33 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 %% Dictionary 
 
 % loading dictionary from MATLAB file (5865 entries):
-% Each entry is time-series signal for specific combination of parameters
-%load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
-%load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
-load(fullfile(folder, 'bloch_dict.mat'));
+%load D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat
+%load D_IDX_SP_Phantom2025.mat % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
+
+%folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
+folder = '/homes/la724/MatlabCode_Phantom/';
+load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
+load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));
 
 % alternatively: the dictionary with B1:
-%load(fullfile(folder, 'Dictionary_B1_SP.mat'));
+load(fullfile(folder, 'Dictionary_B1_SP.mat'));
 
 
-% dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
-% [~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
-% result_s    = diag(s);
-% NRJ= zeros(100,1);
-% for R = 1:100    % ... Energy retained in first R modes
-%     NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
-% end
-% 
-% %R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
-% R = find(NRJ>=0.997,1);
-% disp(R)
-
-
-
-[~, s, ~] = svd(dict0, 'econ');
-result_s = diag(s);
-max_R = length(result_s);  % safe upper bound
-NRJ = zeros(max_R, 1);
-
-for R = 1:max_R
-    NRJ(R) = sum(result_s(1:R)) / sum(result_s);
+dict0 = dict0(1:1000*dyn,:);
+[~,s,~]=svd((dict0),'econ');
+result_s    = diag(s);
+NRJ= zeros(100,1);
+for R = 1:100
+    NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
 end
 
-R = find(NRJ >= 0.997, 1);
+%R = find(NRJ>=0.999,1);
+R = find(NRJ>=0.997,1);
 disp(R)
 
-
-
-
-
-
-
-
-
-
-
-
 % dict must be under the form timeFrame * parameters combinations
-[D] = compression_mrf_dictionary(dict0,idx, R);       % ... Compressing dictionary
-%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg       % ???
+[D] = compression_mrf_dictionary(dict0,idx, R);
+%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg 
 
 % First write all the cfl/hdr files in the correct dimensions for BART
 writecfl('csm',single(csm));
@@ -182,15 +162,16 @@ writecfl('dcf',permute(sqrt(dcf),[5 1 3 4 6 2]));
 writecfl('kdata',permute(U.RawKspaceData,[3 1 5 4 6 2]));
 
 % LR inversion parameters
-lambda = 0.05;    % ...Regularisation weight
-n_iter = 50;    % ... Iteration count 
+lambda = 0.05;
+n_iter = 50;
 
 % Reconstruct singular value images with BART
-tic      % ... Timing 
+tic 
 % for me this line did not work, I had to add [], but I might be using an old wrapper script ...
 %recon = bart('bart pics -d1 -e -l1 -r ',num2str(lambda),' -i',num2str(n_iter),' -p ','dcf',' ',' -t ','traj',' ','-B ','u',' ','kdata',' ','csm');
 cmd = sprintf('pics -d1 -e -l1 -r %f -i %d -p dcf -t traj -B u kdata csm', lambda, n_iter);
-recon = bart(cmd);   % ... Outputs complex valued image of shape [N, N, R]
+recon = bart(cmd);
+
 
 writecfl('recon',single(recon));
 toc 
@@ -204,9 +185,10 @@ idx2 = zeros([size(match_images,1) 1],'single');
 if B1correct ~= 1 && B1correct ~= 0
    disp("Wrong entry");
 elseif B1correct == 1
-    B1   = [0.8:0.02:0.9, 0.91:0.01:1.09, 1.10:0.02:1.2] ;    % ... Range of B1 scaling factors
+    B1   = [0.8:0.02:0.9, 0.91:0.01:1.09, 1.10:0.02:1.2] ;
     % need to specify the folder for the B1 map...
-    folderB1 = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/DICOM/';
+    %folderB1 = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/DICOM/';
+    folderB1 = '/homes/la724/MatlabCode_Phantom/DICOM/';
     mapB1 = double(dicomread([folderB1 'IM_0101']));
     info_mapB1 = dicominfo([folderB1 'IM_0101']);
 
@@ -276,47 +258,3 @@ figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
 figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
 % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
 % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
-
-
-
-
-
-
-
-
-
-% Extract T1 and T2 maps from Qmaps
-T1_map = Qmaps(:,:,1,1);
-T2_map = Qmaps(:,:,1,2);
-
-% Create binary mask and keep 14 largest blobs (vials)
-mask = T1_map > 0;
-mask = bwareafilt(mask, 14);
-
-% Label connected components (vials)
-labeled = bwlabel(mask);
-RGB = label2rgb(labeled);  % Visualize labeled regions
-
-% Show labeled components with numbers on top
-figure; imshow(RGB); title('Labeled connected components');
-stats = regionprops(labeled, 'Centroid');
-hold on;
-for i = 1:length(stats)
-    c = stats(i).Centroid;
-    text(c(1), c(2), num2str(i), ...
-        'Color', 'w', 'FontSize', 12, 'FontWeight', 'bold', ...
-        'HorizontalAlignment', 'center');
-end
-
-% Compute mean T1 and T2 for each region
-stats_T1 = regionprops(labeled, T1_map, 'MeanIntensity');
-stats_T2 = regionprops(labeled, T2_map, 'MeanIntensity');
-
-T1_vals = [stats_T1.MeanIntensity]';
-T2_vals = [stats_T2.MeanIntensity]';
-
-% Display T1/T2 values by region number
-vial_labels = (1:length(T1_vals))';
-T1T2_table = table(vial_labels, T1_vals, T2_vals, ...
-                   'VariableNames', {'VialLabel','T1_ms','T2_ms'});
-disp(T1T2_table)
