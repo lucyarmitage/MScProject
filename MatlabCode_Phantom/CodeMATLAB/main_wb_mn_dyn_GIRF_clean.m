@@ -125,24 +125,50 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 
 % loading dictionary from MATLAB file (5865 entries):
 % Each entry is time-series signal for specific combination of parameters
-load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
-load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
+%load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
+%load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
+load(fullfile(folder, 'bloch_dict.mat'));
 
 % alternatively: the dictionary with B1:
-load(fullfile(folder, 'Dictionary_B1_SP.mat'));
+%load(fullfile(folder, 'Dictionary_B1_SP.mat'));
 
 
-dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
-[~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
-result_s    = diag(s);
-NRJ= zeros(100,1);
-for R = 1:100    % ... Energy retained in first R modes
-    NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
+% dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
+% [~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
+% result_s    = diag(s);
+% NRJ= zeros(100,1);
+% for R = 1:100    % ... Energy retained in first R modes
+%     NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
+% end
+% 
+% %R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
+% R = find(NRJ>=0.997,1);
+% disp(R)
+
+
+
+[~, s, ~] = svd(dict0, 'econ');
+result_s = diag(s);
+max_R = length(result_s);  % safe upper bound
+NRJ = zeros(max_R, 1);
+
+for R = 1:max_R
+    NRJ(R) = sum(result_s(1:R)) / sum(result_s);
 end
 
-%R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
-R = find(NRJ>=0.997,1);
+R = find(NRJ >= 0.997, 1);
 disp(R)
+
+
+
+
+
+
+
+
+
+
+
 
 % dict must be under the form timeFrame * parameters combinations
 [D] = compression_mrf_dictionary(dict0,idx, R);       % ... Compressing dictionary
