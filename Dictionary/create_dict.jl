@@ -1,8 +1,12 @@
-using CUDA, KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra
-CUDA.set_runtime_version!(v"12.0")
+using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra
+# CUDA.set_runtime_version!(v"12.0")
+# println("CUDA available: ", CUDA.has_cuda())
+# println("GPU name: ", CUDA.name(CUDA.device()))
+# CUDA.allowscalar(false)
 
-out_folder = "progress_SP_test"
-out_file   = "progress_SP_test.mat"
+
+out_folder = "progress2"
+out_file   = "blochdict2.mat"
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
 idx = read(f_idx, "idx")
@@ -22,22 +26,9 @@ sim_params["return_type"] = "mat"
 sim_params["sim_method"] = BlochDict(save_Mz=true)
 sim_params["gpu"] = true
 
-seq = read_seq("mpf_001_short.seq")
+seq = read_seq("mpf_001_new_short.seq")
 
-function simulate_slice_profile_x(
-    seq::Sequence; x=range(-10e-3, 10e-3, length=1001), sim_params=Dict{String,Any}("Δt_rf" => 1e-6)
-)
-    sim_params["return_type"] = "state"
-    sys = Scanner()
-    obj = Phantom{Float64}(; x=Array(x), z=zeros(size(x)))
-    mag = simulate(obj, seq, sys; sim_params)
-    return mag
-end
-
-x_pos = collect(range(-10e-3, 10e-3, length=1001))
-M_rf = simulate_slice_profile_x(seq[1035]; x=x_pos)
-profile = abs.(M_rf.xy)
-profile ./= sum(profile)
+x_pos = collect(range(-10e-3, 10e-3, length=101))
 
 for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     key = (Int(round(T1 * 1000)), Int(round(T2 * 1000)))
@@ -65,11 +56,8 @@ for (i, (T1, T2)) in enumerate(sampled_pairs_s)
 
     sig_clean = dropdims(sig, dims=4)
     sig_channel1 = sig_clean[:, :, 1]
-
-    weighted_signal = sig_channel1 * profile
-    signal_mag = abs.(weighted_signal)
+    signal_mag = sig_channel1
     signal_mag = signal_mag[124:248:end][1:1000]
-    signal_mag ./= norm(signal_mag)
 
     @save filepath key signal_mag
 
