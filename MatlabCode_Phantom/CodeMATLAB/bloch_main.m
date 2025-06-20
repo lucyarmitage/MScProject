@@ -121,7 +121,7 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 
 % loading dictionary from MATLAB file (5865 entries):
 % Each entry is time-series signal for specific combination of parameters
-load(fullfile(folder, 'bloch_dict_5mm.mat'));
+load(fullfile(folder, 'blochdict2.mat'));
 
 % alternatively: the dictionary with B1:
 %load(fullfile(folder, 'Dictionary_B1_SP.mat'));
@@ -139,6 +139,8 @@ for R = 1:100    % ... Energy retained in first R modes
     NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
 end
 
+disp(length(result_s))
+
 % 
 % max_R = length(result_s);  % safe upper bound
 % NRJ = zeros(max_R, 1);
@@ -150,7 +152,7 @@ end
 
 
 %R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
-R = find(NRJ>=0.99,1);
+R = find(NRJ>=0.999,1);
 disp(R)
 
 
@@ -254,27 +256,53 @@ end
 
 
 
-% Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
-% Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
-% % PD    = c ./ D.normalization(idx2).';
-% % PD    = reshape(PD, [N N]);
+Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
+Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
+% PD    = c ./ D.normalization(idx2).';
+% PD    = reshape(PD, [N N]);
+
+% Do some background masking
+mask = sum(abs(reshape(svd_images,[[N N] R])),3);
+mask(mask < .4* max(mask(:))) = 0;
+mask (mask ~= 0) = 1;
+Qmaps = bsxfun(@times,Qmaps,mask);
+
+Qmaps = flip (Qmaps);
+figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 max(max(Qmaps(:,:,1,1)))])
+figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 max(max(Qmaps(:,:,1,2)))])
+max(max(Qmaps(:,:,1,1)))
+max(max(Qmaps(:,:,1,2)))
+
+figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
+figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
+% figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
+% figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
+
 % 
-% % Do some background masking
-% mask = sum(abs(reshape(svd_images,[[N N] R])),3);
-% mask(mask < .4* max(mask(:))) = 0;
-% mask (mask ~= 0) = 1;
-% Qmaps = bsxfun(@times,Qmaps,mask);
 % 
-% Qmaps = flip (Qmaps);
-% % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 max(max(Qmaps(:,:,1,1)))])
-% % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 max(max(Qmaps(:,:,1,2)))])
-% % max(max(Qmaps(:,:,1,1)))
-% % max(max(Qmaps(:,:,1,2)))
 % 
-% figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
-% figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
-% % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
-% % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
+% 
+% 
+% 
+% 
+% 
+% 
+% % Prepare maps (flip if needed)
+% t1_map = fliplr(Qmaps(:,:,1,1));
+% t2_map = fliplr(Qmaps(:,:,1,2));
+% 
+% % Show T1 map and collect vial locations
+% figure; imshow(t1_map, [0 3000]); title('Click on vial centers (T1 map)'); colormap hot;
+% [x, y] = ginput(14);  % adjust number if needed
+% x = round(x); y = round(y);
+% 
+% % Print T1 and T2 values
+% for i = 1:length(x)
+%     t1 = t1_map(y(i), x(i));
+%     t2 = t2_map(y(i), x(i));
+%     fprintf('Vial %2d at (%3d, %3d): T1 = %.1f ms, T2 = %.1f ms\n', ...
+%         i, x(i), y(i), t1, t2);
+% end
 
 
 
@@ -285,20 +313,39 @@ end
 
 
 
-% Prepare maps (flip if needed)
-t1_map = fliplr(Qmaps(:,:,1,1));
-t2_map = fliplr(Qmaps(:,:,1,2));
-
-% Show T1 map and collect vial locations
-figure; imshow(t1_map, [0 3000]); title('Click on vial centers (T1 map)'); colormap hot;
-[x, y] = ginput(14);  % adjust number if needed
-x = round(x); y = round(y);
-
-% Print T1 and T2 values
-for i = 1:length(x)
-    t1 = t1_map(y(i), x(i));
-    t2 = t2_map(y(i), x(i));
-    fprintf('Vial %2d at (%3d, %3d): T1 = %.1f ms, T2 = %.1f ms\n', ...
-        i, x(i), y(i), t1, t2);
-end
-
+% 
+% % Prepare T1 and T2 maps
+% t1_map = fliplr(Qmaps(:,:,1,1));
+% t2_map = fliplr(Qmaps(:,:,1,2));
+% 
+% % --- T1 Map Clicks ---
+% figure;
+% imshow(t1_map, [0 3000]); 
+% title('Click on vial centers (T1 map)'); 
+% colormap hot;
+% [x1, y1] = ginput(14);  % adjust number of clicks if needed
+% x1 = round(x1); y1 = round(y1);
+% 
+% fprintf('--- T1 Map Clicks ---\n');
+% for i = 1:length(x1)
+%     t1 = t1_map(y1(i), x1(i));
+%     t2 = t2_map(y1(i), x1(i));
+%     fprintf('Vial %2d at (%3d, %3d): T1 = %.1f ms, T2 = %.1f ms\n', ...
+%         i, x1(i), y1(i), t1, t2);
+% end
+% 
+% % --- T2 Map Clicks ---
+% figure;
+% imshow(t2_map, [0 1500]); 
+% title('Click on vial centers (T2 map)');
+% colormap turbo;
+% [x2, y2] = ginput(14);  % can be the same or different number of clicks
+% x2 = round(x2); y2 = round(y2);
+% 
+% fprintf('\n--- T2 Map Clicks ---\n');
+% for i = 1:length(x2)
+%     t1 = t1_map(y2(i), x2(i));
+%     t2 = t2_map(y2(i), x2(i));
+%     fprintf('Vial %2d at (%3d, %3d): T1 = %.1f ms, T2 = %.1f ms\n', ...
+%         i, x2(i), y2(i), t1, t2);
+% end
