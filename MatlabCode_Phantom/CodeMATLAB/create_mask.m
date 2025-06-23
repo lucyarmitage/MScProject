@@ -2,7 +2,7 @@ folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
 load(fullfile(folder, 'recon_results101.mat')); 
 
 % Show the image 
-magImg = abs(svd_images(:,:,1));
+magImg = Qmaps(:,:,1,1);
 magImg = magImg / max(magImg(:));
 
 f = figure; imshow(magImg, []); title('Draw the first circle to fix radius');
