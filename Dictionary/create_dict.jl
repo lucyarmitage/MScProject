@@ -4,9 +4,8 @@ using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra
 # println("GPU name: ", CUDA.name(CUDA.device()))
 # CUDA.allowscalar(false)
 
-
-out_folder = "progress2"
-out_file   = "blochdict2.mat"
+out_folder = joinpath("progress", "progress_20mm_101")
+out_file   = "blochdict_20mm_101.mat"
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
 idx = read(f_idx, "idx")
@@ -26,13 +25,12 @@ sim_params["return_type"] = "mat"
 sim_params["sim_method"] = BlochDict(save_Mz=true)
 sim_params["gpu"] = true
 
-seq = read_seq("mpf_001_new_short.seq")
+seq = read_seq("mpf_001_new_short1.seq")
 
 x_pos = collect(range(-10e-3, 10e-3, length=101))
 
 for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     key = (Int(round(T1 * 1000)), Int(round(T2 * 1000)))
-    # filepath = "progress_SP/signal_$(key[1])_$(key[2]).jld2"
     filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2]).jld2")
 
     if isfile(filepath)
@@ -54,10 +52,10 @@ for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     sig = nothing
     @suppress sig = simulate(obj, seq, sys; sim_params=sim_params)
 
+
     sig_clean = dropdims(sig, dims=4)
     sig_channel1 = sig_clean[:, :, 1]
-    signal_mag = sig_channel1
-    signal_mag = signal_mag[124:248:end][1:1000]
+    signal_mag = vec(sum(sig_channel1, dims=2))
 
     @save filepath key signal_mag
 
@@ -67,21 +65,18 @@ for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     end
 end
 
-#files = readdir("progress_SP")
 files = readdir(out_folder)
 num_entries = length(files)
 timepoints = 1000
 
-bloch_matrix = zeros(Float64, timepoints, num_entries)
-idx_bloch = zeros(Float64, num_entries, 2)
+bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
+idx_bloch = zeros(ComplexF32, num_entries, 2)
 
 for (j, file) in enumerate(files)
-    # filepath = joinpath("progress_SP", file)
     filepath = joinpath(out_folder, file)
     @load filepath key signal_mag
     bloch_matrix[:, j] .= signal_mag
     idx_bloch[j, :] .= key
 end
 
-# matwrite("progress_SP.mat", Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
 matwrite(out_file, Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
