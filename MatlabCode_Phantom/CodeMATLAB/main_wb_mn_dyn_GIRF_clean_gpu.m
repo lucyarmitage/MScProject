@@ -1,13 +1,34 @@
+clear all;
+
+% Set BART path
+%setenv('TOOLBOX_PATH', '/vol/bitbucket/la724/bart');
+%addpath(genpath('/vol/bitbucket/la724/bart/matlab'));
+
+% Set LD_LIBRARY_PATH
+%setenv('LD_LIBRARY_PATH', ['/vol/bitbucket/la724/fftw_single/lib:', ...
+%                           '/vol/bitbucket/la724/bart/lib:', ...
+%                           getenv('LD_LIBRARY_PATH')]);
+
+%disp(['LD_LIBRARY_PATH inside MATLAB: ' getenv('LD_LIBRARY_PATH')]);
+
+% Use bitbucket-based temporary directory to avoid /homes
+%setenv('TMP', '/vol/bitbucket/la724/tmp');
+%setenv('TMPDIR', '/vol/bitbucket/la724/tmp');
+%setenv('TEMP', '/vol/bitbucket/la724/tmp');
+
+% Set MATLAB working directory
+cd('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB');
+
+
+
 %% Magnetic Resonance Fingerprinting reconstruction code
 
 %% Initialize paths, check for bart toolbox and load data
 
 % Required: BART (installed in WSL)
-%bart_loc = '/mnt/c/Users/lucya/MSC_PROJECT/bart/';
 bart_loc = '/homes/la724/bart/';
 
 % matlab folder of BART contains a script to call BART in WSL
-%addpath(genpath('C:/Users/lucya/MSC_PROJECT/bart/matlab/'));
 addpath(genpath('/homes/la724/bart/matlab/'));
 
 setenv('TOOLBOX_PATH',bart_loc);
@@ -15,25 +36,23 @@ setenv('TOOLBOX_PATH',bart_loc);
 % check if bart toolbox is installed
 if ~isempty(which('bart')); else;disp('>> BART toolbox not found in path. Please check BART path.');end
 
-% add the "utils" subfolder to the PATH:
-%addpath(genpath('C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/CodeMATLAB/utils'));
-addpath(genpath('/homes/la724/MatlabCode_Phantom/CodeMATLAB/utils'));
 
-% folder that contains the raw data:
-%folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
-folder = '/homes/la724/MatlabCode_Phantom/';
+% Add the "utils" subfolder to the path:
+addpath(genpath('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/utils'));
+
+% Folder that contains the raw data:
+folder = '/vol/bitbucket/la724/MatlabCode_Phantom/';
 
 
-%% Load data  
+
+%% Load data
 data = loadRawKspacePhilips([folder 'raw_001.list']);
 
 % raw data and image dimensions (according to .list file):
 Nkx = abs(data.kspace_properties.kx_range(2) - data.kspace_properties.kx_range(1)) + 1;
 Nky = abs(data.kspace_properties.ky_range(2) - data.kspace_properties.ky_range(1)) + 1;
-% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;
 Nx = abs(data.kspace_properties.X_range(2) - data.kspace_properties.X_range(1)) + 1;
 Ny = abs(data.kspace_properties.Y_range(2) - data.kspace_properties.Y_range(1)) + 1;
-% Nz = abs(data.kspace_properties.Z_range(2) - data.kspace_properties.Z_range(1)) + 1;
 Nc  = numel(unique(data.chan));
 % dyn=numel(unique(data.dyn));
 dyn=1;
@@ -66,12 +85,12 @@ kdim            = c12d(size(U.RawKspaceData));
 
 sliceOrientation = 1;
 
-kx_GIRF = fread(fopen([folder 'kx_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
-ky_GIRF = fread(fopen([folder 'ky_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
-kz_GIRF = fread(fopen([folder 'kz_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
-b0_GIRF = fread(fopen([folder 'b0_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64'); 
+kx_GIRF = fread(fopen([folder 'kx_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64');
+ky_GIRF = fread(fopen([folder 'ky_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64');
+kz_GIRF = fread(fopen([folder 'kz_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64');
+b0_GIRF = fread(fopen([folder 'b0_gve_001_girf.bin']),[Nkx*Nky,dyn],'float64');
 
-b0_GIRF= b0_GIRF.*(2* pi* 42.57746778); %scale the error by multiplying by 2* pi* gyromagnetic ratio 42.57746778 MHz/T same as Philips 
+b0_GIRF= b0_GIRF.*(2* pi* 42.57746778); %scale the error by multiplying by 2* pi* gyromagnetic ratio 42.57746778 MHz/T same as Philips
 trajx_GIRF = reshape(kx_GIRF,[Nkx,Nky*dyn]);
 trajy_GIRF = reshape(ky_GIRF,[Nkx,Nky*dyn]);
 trajz_GIRF = reshape(kz_GIRF,[Nkx,Nky*dyn]);
@@ -79,7 +98,7 @@ b0_GIRF = reshape(b0_GIRF,[Nkx,Nky*dyn]);
 
 % Coronal slice
 trajx_GIRF = trajx_GIRF * 2 * pi * distanceSlice; % put the output of the GIRF in rad (for coronal slice)
-trajGIRF(1,:,:)= trajz_GIRF; 
+trajGIRF(1,:,:)= trajz_GIRF;
 trajGIRF(2,:,:) = trajy_GIRF;
 trajGIRF(3,:,:) = 0;
 
@@ -92,7 +111,7 @@ comb_raw=zeros(kdim(1),Nc,kdim(2)*dyn);
 location=0;
 step=1000;
 
-U.RawKspaceData= permute(U.RawKspaceData,[1 4 2 3]); 
+U.RawKspaceData= permute(U.RawKspaceData,[1 4 2 3]);
 for d=1:dyn
     comb_raw(:,:,location+1:step)= squeeze(U.RawKspaceData(:,:,:,d));
     location=location+1000;
@@ -101,17 +120,17 @@ end
 
 U.RawKspaceData= permute(comb_raw,[1 3 4 2]);
 
-% Add b0 eddy current phase correction of the raw data 
-U.RawKspaceData = U.RawKspaceData.*exp(-1i*(b0_GIRF)); %  
+% Add b0 eddy current phase correction of the raw data
+U.RawKspaceData = U.RawKspaceData.*exp(-1i*(b0_GIRF)); %
 
-% Also need after to apply the z-GIRF phase 
-if sliceOrientation == 1 
+% Also need after to apply the z-GIRF phase
+if sliceOrientation == 1
     U.RawKspaceData = U.RawKspaceData.*exp(-1i*(trajx_GIRF));
 elseif sliceOrientation == 2
     U.RawKspaceData = U.RawKspaceData.*exp(-1i*(trajz_GIRF));
 elseif sliceOrientation == 3
     U.RawKspaceData = U.RawKspaceData.*exp(-1i*(trajy_GIRF));
-else 
+else
     disp('An error occured')
 end
 
@@ -119,23 +138,25 @@ end
 B1correct = 0;
 
 % Reconstruct multi-channel images to estimate CSM
+
+
 nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4])); %Phantom 0.25
 imgForCSM = bart('fft 3',nufft);
-csm   = bart('ecalib -m1',imgForCSM); %put a threshold ? 
+csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 
-%% Dictionary 
+%% Dictionary
 
 % loading dictionary from MATLAB file (5865 entries):
-%load D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat
-%load D_IDX_SP_Phantom2025.mat % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
+% load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
+% load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));
 
-%folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/';
-folder = '/homes/la724/MatlabCode_Phantom/';
-load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
-load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));
+folder = '/vol/bitbucket/la724/MatlabCode_Phantom/';
+load(fullfile(folder, 'blochdict_20mm_101.mat'));
+
+
 
 % alternatively: the dictionary with B1:
-load(fullfile(folder, 'Dictionary_B1_SP.mat'));
+% load(fullfile(folder, 'Dictionary_B1_SP.mat'));
 
 
 dict0 = dict0(1:1000*dyn,:);
@@ -146,35 +167,44 @@ for R = 1:100
     NRJ(R,1) = sum(result_s(1:R))/sum(result_s);
 end
 
-%R = find(NRJ>=0.999,1);
-R = find(NRJ>=0.997,1);
-disp(R)
+R = find(NRJ>=0.998,1);
+disp(R);
 
 % dict must be under the form timeFrame * parameters combinations
 [D] = compression_mrf_dictionary(dict0,idx, R);
-%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg 
+%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg
 
 % First write all the cfl/hdr files in the correct dimensions for BART
-writecfl('csm',single(csm));
-writecfl('u',permute(D.u,[3 4 5 6 7 1 2]));
-writecfl('traj',permute(.25 * trajGIRF,[1 2 5 4 6 3]))
-writecfl('dcf',permute(sqrt(dcf),[5 1 3 4 6 2]));
-writecfl('kdata',permute(U.RawKspaceData,[3 1 5 4 6 2]));
+% writecfl('csm',single(csm));
+% writecfl('u',permute(D.u,[3 4 5 6 7 1 2]));
+% writecfl('traj',permute(.25 * trajGIRF,[1 2 5 4 6 3]))
+% writecfl('dcf',permute(sqrt(dcf),[5 1 3 4 6 2]));
+% writecfl('kdata',permute(U.RawKspaceData,[3 1 5 4 6 2]));
+
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/csm', single(csm));
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/u', permute(D.u, [3 4 5 6 7 1 2]));
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/traj', permute(.25 * trajGIRF, [1 2 5 4 6 3]));
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/dcf', permute(sqrt(dcf), [5 1 3 4 6 2]));
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/kdata', permute(U.RawKspaceData, [3 1 5 4 6 2]));
+
+
 
 % LR inversion parameters
 lambda = 0.05;
 n_iter = 50;
 
 % Reconstruct singular value images with BART
-tic 
+tic
 % for me this line did not work, I had to add [], but I might be using an old wrapper script ...
 %recon = bart('bart pics -d1 -e -l1 -r ',num2str(lambda),' -i',num2str(n_iter),' -p ','dcf',' ',' -t ','traj',' ','-B ','u',' ','kdata',' ','csm');
 cmd = sprintf('pics -d1 -e -l1 -r %f -i %d -p dcf -t traj -B u kdata csm', lambda, n_iter);
 recon = bart(cmd);
 
 
-writecfl('recon',single(recon));
-toc 
+%writecfl('recon',single(recon));
+writecfl('/vol/bitbucket/la724/MatlabCode_Phantom/CodeMATLAB/recon', single(recon));
+
+toc
 
 svd_images= reshape(readcfl('recon'),N,N,R);
 match_images = reshape(svd_images,N^2,R);
@@ -195,7 +225,7 @@ elseif B1correct == 1
     mapB1_FP = mapB1/info_mapB1.Private_2005_100e  -  info_mapB1.Private_2005_100d/info_mapB1.Private_2005_100e;
     mapB1_percent = mapB1_FP/100; % Map on which I want to apply the transformation
 
-    % Interpolate to get the same size as the MRF images 
+    % Interpolate to get the same size as the MRF images
     sz_for_registration = size(mapB1_percent);
     x_before = 1:sz_for_registration(1);
     y_before = 1:sz_for_registration(2);
@@ -235,7 +265,7 @@ else
     for n = 1 : N^2
         [c(n,1),idx2(n,1)] = max(match_images(n,:) * conj(D.magnetization), [], 2);
     end
-end 
+end
 
 Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
 Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
@@ -255,6 +285,8 @@ Qmaps = flip (Qmaps);
 % max(max(Qmaps(:,:,1,2)))
 
 figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
-figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
+figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]);
 % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
 % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
+
+%save(fullfile(folder, 'recon_results_20mm_101_GPU.mat'), 'svd_images', 'D', 'dict0', 'idx', 'R', 'match_images', 'idx2', 'c', 'N', 'Qmaps');
