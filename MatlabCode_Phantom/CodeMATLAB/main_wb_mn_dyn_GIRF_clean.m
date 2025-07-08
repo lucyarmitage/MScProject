@@ -127,9 +127,11 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 % Each entry is time-series signal for specific combination of parameters
 load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
 load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
+% dict_folder = 'C:/Users/LucyA/MSC_PROJECT/Dictionary/dict';
+% load(fullfile(dict_folder, 'blochdict_10mm_101.mat'));
 
 % alternatively: the dictionary with B1:
-load(fullfile(folder, 'Dictionary_B1_SP.mat'));
+% load(fullfile(folder, 'Dictionary_B1_SP.mat'));
 
 
 dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
@@ -143,29 +145,6 @@ end
 %R = find(NRJ>=0.999,1);    % Pick # of modes to keep 99.9% of signal energy
 R = find(NRJ>=0.998,1);
 disp(R)
-
-
-
-% [~, s, ~] = svd(dict0, 'econ');
-% result_s = diag(s);
-% max_R = length(result_s);  % safe upper bound
-% NRJ = zeros(max_R, 1);
-% 
-% for R = 1:max_R
-%     NRJ(R) = sum(result_s(1:R)) / sum(result_s);
-% end
-% 
-% R = find(NRJ >= 0.996, 1);
-% disp(R)
-
-
-
-
-
-
-
-
-
 
 
 
@@ -254,6 +233,9 @@ else
     end
 end 
 
+recon_folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/recon_results';
+save(fullfile(recon_folder, 'recon_results_epg_NEW.mat'), 'svd_images', 'D', 'dict0', 'idx', 'R', 'match_images', 'idx2', 'c', 'N');
+
 Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
 Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
 % PD    = c ./ D.normalization(idx2).';
@@ -275,57 +257,3 @@ figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
 figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
 % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
 % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% 
-% % Extract T1 and T2 maps from Qmaps
-% T1_map = Qmaps(:,:,1,1);
-% T2_map = Qmaps(:,:,1,2);
-% 
-% % Create binary mask and keep 14 largest blobs (vials)
-% mask = T1_map > 0;
-% mask = bwareafilt(mask, 14);
-% 
-% % Label connected components (vials)
-% labeled = bwlabel(mask);
-% RGB = label2rgb(labeled);  % Visualize labeled regions
-% 
-% % Show labeled components with numbers on top
-% figure; imshow(RGB); title('Labeled connected components');
-% stats = regionprops(labeled, 'Centroid');
-% hold on;
-% for i = 1:length(stats)
-%     c = stats(i).Centroid;
-%     text(c(1), c(2), num2str(i), ...
-%         'Color', 'w', 'FontSize', 12, 'FontWeight', 'bold', ...
-%         'HorizontalAlignment', 'center');
-% end
-% 
-% % Compute mean T1 and T2 for each region
-% stats_T1 = regionprops(labeled, T1_map, 'MeanIntensity');
-% stats_T2 = regionprops(labeled, T2_map, 'MeanIntensity');
-% 
-% T1_vals = [stats_T1.MeanIntensity]';
-% T2_vals = [stats_T2.MeanIntensity]';
-% 
-% % Display T1/T2 values by region number
-% vial_labels = (1:length(T1_vals))';
-% T1T2_table = table(vial_labels, T1_vals, T2_vals, ...
-%                    'VariableNames', {'VialLabel','T1_ms','T2_ms'});
-% disp(T1T2_table)
