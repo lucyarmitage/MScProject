@@ -113,7 +113,7 @@ end
 B1correct = 0;
 
 % Reconstruct multi-channel images to estimate CSM
-nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4])); %Phantom 0.25
+nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4]));
 imgForCSM = bart('fft 3',nufft);
 csm   = bart('ecalib -m1',imgForCSM); %put a threshold ? 
 
@@ -146,7 +146,7 @@ disp(R)
 % First write all the cfl/hdr files in the correct dimensions for BART
 writecfl('csm',single(csm));
 writecfl('u',permute(D.u,[3 4 5 6 7 1 2]));
-writecfl('traj',permute(.5 * trajGIRF,[1 2 5 4 6 3]))
+writecfl('traj',permute(.25 * trajGIRF,[1 2 5 4 6 3]))
 writecfl('dcf',permute(sqrt(dcf),[5 1 3 4 6 2]));
 writecfl('kdata',permute(U.RawKspaceData,[3 1 5 4 6 2]));
 
@@ -200,8 +200,8 @@ Qmaps = flip (Qmaps);
 
 % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]);
 % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); 
-figure; imshow3(fliplr(Qmaps(:,:,1,1)), []);
-figure; imshow3(fliplr(Qmaps(:,:,1,2)), []); 
+figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 1500]);
+figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 250]); 
 % figure; imshow3(fliplr(Qmaps(:,:,1,1)), [0 3000]); colormap hot;
 % figure; imshow3(fliplr(Qmaps(:,:,1,2)), [0 1500]); colormap turbo;
 

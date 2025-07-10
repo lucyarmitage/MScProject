@@ -96,7 +96,7 @@ end
 U.RawKspaceData= permute(comb_raw,[1 3 4 2]);
 
 % Add b0 eddy current phase correction of the raw data 
-U.RawKspaceData = U.RawKspaceData.*exp(-1i*(b0_GIRF)); %  
+U.RawKspaceData = U.RawKspaceData.*exp(-1i*(b0_GIRF));  
 
 % Also need after to apply the z-GIRF phase 
 if sliceOrientation == 1 
@@ -113,7 +113,7 @@ end
 B1correct = 0;
 
 % Reconstruct multi-channel images to estimate CSM
-nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4])); %Phantom 0.25
+nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.5*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4]));
 imgForCSM = bart('fft 3',nufft);
 csm   = bart('ecalib -m1',imgForCSM); %put a threshold ? 
 
@@ -125,8 +125,8 @@ dict_folder = 'C:/Users/LucyA/MSC_PROJECT/Volunteer/dict';
 load(fullfile(dict_folder, 'blochdict_prostate_20mm_101_short.mat'));
 
 
-dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
-[~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
+dict0 = dict0(1:1000*dyn,:);    % First dyn*1000 time points
+[~,s,~]=svd((dict0),'econ');    % SVD: captures dominant signal patterns
 result_s    = diag(s);
 NRJ= zeros(100,1);
 for R = 1:100    % ... Energy retained in first R modes
