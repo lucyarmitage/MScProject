@@ -38,21 +38,21 @@ figure;
 plot(abs(compressed_meas_sig), 'k--'); hold on;
 plot(abs(compressed_dict_sig_scaled), 'r');
 legend('Measured signal', "Matched dictionary signal (scaled)")
-xlabel('Singular vector index'); ylabel('|Signal|');                                       % Fix axis labels !!
+xlabel('Singular vector index'); ylabel('|Signal|');                                 
 title(sprintf('Abs - Voxel (%d, %d): T1=%d, T2=%d', x, y, T1, T2));
 
 figure;
 plot(real(compressed_meas_sig), 'k--'); hold on;
 plot(real(compressed_dict_sig_scaled), 'r');
 legend('Measured signal', "Matched dictionary signal (scaled)")
-xlabel('Singular vector index'); ylabel('Signal real part');                                       % Fix axis labels !!
+xlabel('Singular vector index'); ylabel('Signal real part');                                     
 title(sprintf('Real - Voxel (%d, %d): T1=%d, T2=%d', x, y, T1, T2));
 
 figure;
 plot(imag(compressed_meas_sig), 'k--'); hold on;
 plot(imag(compressed_dict_sig_scaled), 'r');
 legend('Measured signal', "Matched dictionary signal (scaled)")
-xlabel('Singular vector index'); ylabel('Signal imag part');                                       % Fix axis labels !!
+xlabel('Singular vector index'); ylabel('Signal imag part');                                    
 title(sprintf('Imag - Voxel (%d, %d): T1=%d, T2=%d', x, y, T1, T2));
 
 % Uncompressed signal 
