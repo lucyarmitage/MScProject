@@ -1,4 +1,3 @@
-clear;
 %% Magnetic Resonance Fingerprinting reconstruction code
 
 % ... Using data from Philips scanner 
@@ -27,17 +26,19 @@ data = loadRawKspacePhilips([folder 'raw_001.list']);
 % raw data and image dimensions (according to .list file):
 Nkx = abs(data.kspace_properties.kx_range(2) - data.kspace_properties.kx_range(1)) + 1;
 Nky = abs(data.kspace_properties.ky_range(2) - data.kspace_properties.ky_range(1)) + 1;
+% Nkz = abs(data.kspace_properties.kz_range(2) - data.kspace_properties.kz_range(1)) + 1;  % ... if 3D acquisition?  
 Nx = abs(data.kspace_properties.X_range(2) - data.kspace_properties.X_range(1)) + 1;
 Ny = abs(data.kspace_properties.Y_range(2) - data.kspace_properties.Y_range(1)) + 1;
+% Nz = abs(data.kspace_properties.Z_range(2) - data.kspace_properties.Z_range(1)) + 1;
 Nc  = numel(unique(data.chan));
-% dyn=numel(unique(data.dyn));
-dyn=1;  
+dyn=numel(unique(data.dyn));    % 10
+%dyn=1;  
 neco = data.kspace_properties.number_of_echoes;
 slices=numel(unique(data.loca));
 
 distanceSlice = 0;
 
-% extract noise adjustment data:
+% extract noise adjustment data:       ... COME BACK TO THIS
 noise = complex(zeros(numel(data.complexdata{find(cell2mat(data.typ) == 'NOI', 1)}), Nc));
 for ii = 1:numel(data.complexdata)    % ... Loops over every line of raw data
     if strcmp(data.typ{ii}, 'NOI')    % ... Lines marked noise
@@ -46,6 +47,7 @@ for ii = 1:numel(data.complexdata)    % ... Loops over every line of raw data
 end
 
 
+% ... ?
 % put raw data in more useful structure. ky index is problematic, we use the knowledge about the order in which k-space data is acquired:
 raw = complex(zeros(Nkx,Nc,Nky,dyn));   % ... Empty 4D complex array to hold raw data
 for ii = 1:(numel(data.complexdata))    % ... Loops over every line of raw data
@@ -111,9 +113,8 @@ else
     disp('An error occured')
 end
 
-% prompt = "Is there a B1 correction (1- Yes, 0- No)? ";
-% B1correct = input(prompt);
-B1correct = 0;
+prompt = "Is there a B1 correction (1- Yes, 0- No)? ";
+B1correct = input(prompt);
 
 % Reconstruct multi-channel images to estimate CSM
 nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4])); %Phantom 0.25
@@ -127,11 +128,10 @@ csm   = bart('ecalib -m1',imgForCSM); %put a threshold ?
 % load(fullfile(folder, 'D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat'));
 % load(fullfile(folder, 'D_IDX_SP_Phantom2025.mat'));     % apparently this is also needed - these are likely the T1, T2 (and B1 (?)) values for each dictionary entry
 dict_folder = 'C:/Users/LucyA/MSC_PROJECT/Dictionary/dict';
-load(fullfile(dict_folder, 'blochdict_10mm_501_short.mat'));
+load(fullfile(dict_folder, 'blochdict_10mm_101_long.mat'));
 
 % alternatively: the dictionary with B1:
 % load(fullfile(folder, 'Dictionary_B1_SP.mat'));
-
 
 dict0 = dict0(1:1000*dyn,:);    % ... First dyn*1000 time points
 [~,s,~]=svd((dict0),'econ');    % ... SVD: captures dominant signal patterns
@@ -147,8 +147,8 @@ disp(R)
 
 
 % dict must be under the form timeFrame * parameters combinations
-[D] = compression_mrf_dictionary(dict0,idx, R);       % ... Compressing dictionary
-%%D = MRF_dictionary_umcu(idx', R, double(sum(dict,3))); % epg       % ???
+[D] = compression_mrf_dictionary(dict0,idx, R);      
+
 
 % First write all the cfl/hdr files in the correct dimensions for BART
 writecfl('csm',single(csm));
@@ -162,7 +162,9 @@ lambda = 0.05;    % ...Regularisation weight
 n_iter = 50;    % ... Iteration count 
 
 % Reconstruct singular value images with BART
-tic 
+tic      % ... Timing 
+% for me this line did not work, I had to add [], but I might be using an old wrapper script ...
+%recon = bart('bart pics -d1 -e -l1 -r ',num2str(lambda),' -i',num2str(n_iter),' -p ','dcf',' ',' -t ','traj',' ','-B ','u',' ','kdata',' ','csm');
 cmd = sprintf('pics -d1 -e -l1 -r %f -i %d -p dcf -t traj -B u kdata csm', lambda, n_iter);
 recon = bart(cmd);   % ... Outputs complex valued image of shape [N, N, R]
 
@@ -230,7 +232,7 @@ else
 end 
 
 recon_folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/recon_results';
-save(fullfile(recon_folder, '10mm_501_short.mat'), 'svd_images', 'D', 'dict0', 'idx', 'R', 'match_images', 'idx2', 'c', 'N');
+save(fullfile(recon_folder, '10mm_101_long.mat'), 'svd_images', 'D', 'dict0', 'idx', 'R', 'match_images', 'idx2', 'c', 'N');
 
 Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
 Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
