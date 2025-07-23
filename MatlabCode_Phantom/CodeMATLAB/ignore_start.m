@@ -90,22 +90,19 @@ end
 
 U.RawKspaceData = permute(comb_raw,[1 3 4 2]);
 
-% === Crop to timepoints 101–1000 ===
-U.RawKspaceData = U.RawKspaceData(:,start:1000*dyn,:,:);
-b0_GIRF     = b0_GIRF(:,start:1000*dyn);
-trajx_GIRF  = trajx_GIRF(:,start:1000*dyn);
-trajy_GIRF  = trajy_GIRF(:,start:1000*dyn);
+U.RawKspaceData = U.RawKspaceData(:,start:1000*dyn,:,:);     % crops k-space data
+b0_GIRF     = b0_GIRF(:,start:1000*dyn);      % crops the B0-induced phase error correction values
+trajx_GIRF  = trajx_GIRF(:,start:1000*dyn);     % crops the x/y/z-component of the k-space trajectory (after GIRF correction)
+trajy_GIRF  = trajy_GIRF(:,start:1000*dyn);   
 trajz_GIRF  = trajz_GIRF(:,start:1000*dyn);
 
 
-% === Rebuild trajectory and DCF ===
 trajGIRF(1,:,:) = trajz_GIRF;
 trajGIRF(2,:,:) = trajy_GIRF;
 trajGIRF(3,:,:) = 0;
 trajGIRF = repmat(trajGIRF,[1 1 1 1 kdim(6)]);
 dcf = permute(radial_density(trajGIRF(:,:,:,:,1)),[1 2 3 5 4]);
 
-% === Apply corrections ===
 U.RawKspaceData = U.RawKspaceData .* exp(-1i * b0_GIRF);
 if sliceOrientation == 1 
     U.RawKspaceData = U.RawKspaceData .* exp(-1i * trajx_GIRF);
@@ -117,7 +114,6 @@ else
     disp('An error occurred')
 end
 
-% Continue with NUFFT, reconstruction, dictionary, etc.
 B1correct = 0;
 nufft = bart(['nufft -a -d ',num2str(N),':',num2str(N),':1'],0.25*trajGIRF,permute(bsxfun(@times,dcf,U.RawKspaceData),[3 1 2 4]));
 imgForCSM = bart('fft 3',nufft);
