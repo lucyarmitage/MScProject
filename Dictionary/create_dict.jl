@@ -1,3 +1,5 @@
+using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra
+
 out_folder = joinpath("progress", "progress_10mm_101_short")
 out_file = "blochdict_10mm_101_short.mat"
 mkpath(out_folder)
