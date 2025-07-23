@@ -1,5 +1,5 @@
-out_folder = joinpath("progress", "progress_14mm_141_long")
-out_file = "blochdict_10mm_101_long.mat"
+out_folder = joinpath("progress", "progress_10mm_101_short")
+out_file = "blochdict_10mm_101_short.mat"
 mkpath(out_folder)
 
 batch = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
