@@ -1,11 +1,9 @@
-using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra
-# CUDA.set_runtime_version!(v"12.0")
-# println("CUDA available: ", CUDA.has_cuda())
-# println("GPU name: ", CUDA.name(CUDA.device()))
-# CUDA.allowscalar(false)
+out_folder = joinpath("progress", "progress_14mm_141_long")
+out_file = "blochdict_10mm_101_long.mat"
+mkpath(out_folder)
 
-out_folder = joinpath("progress", "progress_20mm_101")
-out_file   = "blochdict_20mm_101.mat"
+batch = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
+batch_size = 50 
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
 idx = read(f_idx, "idx")
@@ -25,9 +23,9 @@ sim_params["return_type"] = "mat"
 sim_params["sim_method"] = BlochDict(save_Mz=true)
 sim_params["gpu"] = true
 
-seq = read_seq("mpf_001_new_short1.seq")
+seq = read_seq("sequences/mpf_001_PhantomStudy124.seq")
 
-x_pos = collect(range(-10e-3, 10e-3, length=101))
+x_pos = collect(range(-5e-3, 5e-3, length=101))
 
 for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     key = (Int(round(T1 * 1000)), Int(round(T2 * 1000)))
@@ -57,11 +55,16 @@ for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     sig_channel1 = sig_clean[:, :, 1]
     signal_mag = vec(sum(sig_channel1, dims=2))
 
-    @save filepath key signal_mag
+    batch[key] = signal_mag
 
-    if i % 50 == 0 || i == length(sampled_pairs_s)
-        println("Processed $i / $(length(sampled_pairs_s)) entries")
+    if length(batch) >= batch_size || i == length(sampled_pairs_s)
+        for (key, sig) in batch
+            filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2]).jld2")
+            @save filepath key signal_mag=sig
+        end
+        println("Saved batch at iteration $i (size: $(length(batch)))")
         flush(stdout)
+        empty!(batch)
     end
 end
 
