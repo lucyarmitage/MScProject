@@ -22,10 +22,10 @@ sys = Scanner()
 
 sim_params = KomaMRICore.default_sim_params()
 sim_params["return_type"] = "mat"
-sim_params["sim_method"] = BlochDict(save_Mz=true)
-sim_params["gpu"] = true
+sim_params["sim_method"] = BlochDict()
+sim_params["gpu"] = false
 
-seq = read_seq("sequences/mpf_001_PhantomStudy124.seq")
+seq = read_seq("sequences/mpf_001_PhantomStudy_short_124.seq")
 
 x_pos = collect(range(-5e-3, 5e-3, length=101))
 
@@ -53,9 +53,8 @@ for (i, (T1, T2)) in enumerate(sampled_pairs_s)
     @suppress sig = simulate(obj, seq, sys; sim_params=sim_params)
 
 
-    sig_clean = dropdims(sig, dims=4)
-    sig_channel1 = sig_clean[:, :, 1]
-    signal_mag = vec(sum(sig_channel1, dims=2))
+    sig_clean = dropdims(sig; dims=(3,4))
+    signal_mag = vec(sum(sig_clean, dims=2))
 
     batch[key] = signal_mag
 
