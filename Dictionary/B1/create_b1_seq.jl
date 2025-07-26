@@ -1,6 +1,4 @@
-using KomaMRI, Printf
-
-seq = read_seq("mpf_001_new_short_copy.seq")
+using Printf
 
 function scale_rf_amplitudes(input_path::String, output_path::String, scale::Float64)
 
@@ -39,4 +37,9 @@ function scale_rf_amplitudes(input_path::String, output_path::String, scale::Flo
     println("Done")
 end
 
-scale_rf_amplitudes("mpf_001_new_short_copy.seq", "mpf_001_b1scale_0.9.seq", 0.9)
+seq = "C:/Users/lucya/MSC_PROJECT/Dictionary/sequences/mpf_001_PhantomStudy_short_124.seq"
+b1s = vcat(0.8:0.02:0.9, 0.91:0.01:1.09, 1.10:0.02:1.2)
+for b1 in b1s
+    filename = @sprintf("b1_%.2f_short_124.seq", b1)
+    scale_rf_amplitudes(seq, filename, b1)
+end
