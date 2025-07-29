@@ -1,0 +1,107 @@
+using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra, Distributions
+
+out_folder = joinpath("progress", "progress_10mm_51_offresonance_short_test")
+out_file = "blochdict_10mm_51_offresonance_short_test.mat"
+mkpath(out_folder)
+
+batch = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
+batch_size = 50 
+
+f_idx = matopen("D_IDX_SP_Phantom2025.mat")
+idx = read(f_idx, "idx")
+close(f_idx)
+
+f_dict = matopen("D_Phantom2025_invEff096_SPinf_norefocusingTEadj_576InvTime_1000RF_10mm_101iso_0.mat")
+dict_epg = read(f_dict, "dict0")
+close(f_dict)
+
+sampled_pairs_ms = [(row[1], row[2]) for row in eachrow(idx)]
+sampled_pairs_s  = [(T1 / 1000, T2 / 1000) for (T1, T2) in sampled_pairs_ms]
+
+sys = Scanner()
+
+sim_params = KomaMRICore.default_sim_params()
+sim_params["return_type"] = "mat"
+sim_params["sim_method"] = BlochDict()
+sim_params["gpu"] = false
+
+seq = read_seq("sequences/mpf_001_PhantomStudy_short_124.seq")
+
+x_pos = collect(range(-5e-3, 5e-3, length=101))
+
+for (i, (T1, T2)) in enumerate(sampled_pairs_s)
+    key = (Int(round(T1 * 1000)), Int(round(T2 * 1000)))
+    filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2]).jld2")
+
+    if isfile(filepath)
+        if i % 50 == 0
+            println("Skipping existing signal for $key (iteration $i)")
+            flush(stdout)
+        end
+        continue
+    end
+
+    T2star = max(min(T2 - 0.005, 0.020), 0.002)
+    T2prime = 1 / (1 / T2star - 1 / T2)
+    fwhm = 1 / (π * T2prime)  # Hz
+    γ = fwhm / 2
+    lorentz = Cauchy(0, γ)
+
+    N_samples = 5
+
+    cutoff = 3 * γ
+    lorentz_trunc = Truncated(Cauchy(0, γ), -cutoff, cutoff)
+    offres_values = rand(lorentz_trunc, N_samples)
+
+    signals = Vector{Vector{ComplexF32}}()
+
+    for Δf in offres_values
+        Δω = 2π * Δf  # rad/s
+
+        obj = Phantom{Float64}(
+            x = x_pos,
+            y = zeros(length(x_pos)),
+            z = zeros(length(x_pos)),
+            T1 = fill(T1, length(x_pos)),
+            T2 = fill(T2, length(x_pos)),
+            Δw = fill(Δω, length(x_pos))
+        )
+
+        sig = nothing
+        @suppress sig = simulate(obj, seq, sys; sim_params=sim_params)
+
+        sig_clean = dropdims(sig; dims=(3,4))
+        signal = vec(sum(sig_clean, dims=2)) 
+        push!(signals, signal)
+    end
+
+    signal_avg = sum(signals) ./ length(signals)
+    batch[key] = signal_avg
+
+
+    if length(batch) >= batch_size || i == length(sampled_pairs_s)
+        for (key, sig) in batch
+            filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2]).jld2")
+            @save filepath key signal_mag=sig
+        end
+        println("Saved batch at iteration $i (size: $(length(batch)))")
+        flush(stdout)
+        empty!(batch)
+    end
+end
+
+files = readdir(out_folder)
+num_entries = length(files)
+timepoints = 1000
+
+bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
+idx_bloch = zeros(ComplexF32, num_entries, 2)
+
+for (j, file) in enumerate(files)
+    filepath = joinpath(out_folder, file)
+    @load filepath key signal_mag
+    bloch_matrix[:, j] .= signal_mag
+    idx_bloch[j, :] .= key
+end
+
+matwrite(out_file, Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
