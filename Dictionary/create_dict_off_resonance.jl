@@ -11,9 +11,9 @@ sim_params = KomaMRICore.default_sim_params()
 sim_params["return_type"] = "mat"
 sim_params["sim_method"] = BlochDict()
 sim_params["gpu"] = true
-seq = read_seq("mpf_001_PhantomStudy_short_124.seq")
+seq = read_seq("sequences/mpf_001_PhantomStudy_short_124.seq")
 
-x_pos = collect(range(-7.5e-3, 7.5e-3, length=151))
+x_pos = collect(range(-3.5e-3, 3.5e-3, length=71))
 batch_size_pairs = 250
 timepoints = 1000
 
@@ -37,8 +37,8 @@ function build_batch_phantom(pairs_chunk, Δf_values, weights)
     return big_phantom, spins_per_pair
 end
 
-for γ in [1.0, 2.0, 3.0, 4.0]
-    gamma_label = replace(@sprintf("%.1f", γ), "." => "_")
+for γ in [24.0]
+    gamma_label = replace(@sprintf("%.2f", γ), "." => "_")
     N_samples = 15
     cutoff = 3 * γ
     Δf_values = collect(range(-cutoff, cutoff; length=N_samples))
@@ -46,7 +46,7 @@ for γ in [1.0, 2.0, 3.0, 4.0]
     weights = lorentz_pdf.(Δf_values)
     weights ./= sum(weights)
 
-    out_folder = joinpath("/vol/bitbucket/la724/progress", "15mm_$gamma_label")
+    out_folder = joinpath("/vol/bitbucket/la724/progress", "7mm_$gamma_label")
     mkpath(out_folder)
     batch_results = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
 
@@ -93,6 +93,6 @@ for γ in [1.0, 2.0, 3.0, 4.0]
     end
 
     mkpath("dict")
-    out_file = "dict/dict_15mm_$gamma_label.mat"
+    out_file = "dict/dict_7mm_$gamma_label.mat"
     matwrite(out_file, Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
 end
