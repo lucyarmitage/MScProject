@@ -1,31 +1,35 @@
 using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra, CUDA
 
-phantom_length   = 10          # mm
-num_points       = 101         # num sample points
-batch_size_pairs = 800         # phantoms per batch
+phantom_length = 10          # mm
+num_points = 11          # sample points
+batch_size_pairs = 1           # phantoms per batch
 sliceOrientation = 1           # 1=coronal, 2=transverse, 3=sagittal
 
 seq = read_seq("sequences/mpf_001_PhantomStudy_short_124.seq")
-
-run_name  = "$(phantom_length)mm_$(num_points)_short"
+run_name = "test$(phantom_length)mm_$(num_points)_short"
 
 phantom_length_m = phantom_length / 1000
 pos = collect(range(-phantom_length_m/2, phantom_length_m/2, length=num_points))
 
-function build_combined_phantom(pairs_chunk)
-    zN = zeros(num_points)
+zN = zeros(Float64, num_points)
+xvec, yvec, zvec =
+    sliceOrientation == 1 ? (pos,  zN,  zN) :   # coronal: vary x
+    sliceOrientation == 2 ? (zN,  zN,  pos) :   # transverse: vary z
+                          (zN,  pos,  zN)      # sagittal: vary y
 
-    xvec, yvec, zvec =
-        sliceOrientation == 1 ? (pos,  zN,  zN) :   # coronal: vary x
-        sliceOrientation == 2 ? (zN,  zN,  pos) :   # transverse: vary z
-        sliceOrientation == 3 ? (zN,  pos,  zN) :   # sagittal: vary y
-        error("sliceOrientation must be 1, 2, or 3.")
+function build_combined_phantom(
+    pairs_chunk::AbstractVector{<:Tuple{<:Real,<:Real}}
+)
 
     combined_phantom = Phantom{Float64}(x=Float64[], y=Float64[], z=Float64[], T1=Float64[], T2=Float64[])
     spins_per_pair = Int[]
 
     for (T1, T2) in pairs_chunk
-        phantom_piece = Phantom{Float64}(x=xvec, y=yvec, z=zvec, T1=fill(T1, num_points), T2=fill(T2, num_points))
+        phantom_piece = Phantom{Float64}(
+            x=xvec, y=yvec, z=zvec,
+            T1=fill(Float64(T1), num_points),
+            T2=fill(Float64(T2), num_points),
+        )
         combined_phantom += phantom_piece
         push!(spins_per_pair, num_points)
     end
@@ -34,14 +38,14 @@ function build_combined_phantom(pairs_chunk)
 end
 
 out_folder = joinpath("/vol/bitbucket/la724/progress", "progress_$run_name")
-out_file   = "dict/blochdict_$run_name.mat"
+out_file = "dict/blochdict_$run_name.mat"
 mkpath(out_folder)
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
 idx = read(f_idx, "idx"); close(f_idx)
 
 sampled_pairs_ms = [(row[1], row[2]) for row in eachrow(idx)]
-sampled_pairs_s  = [(T1 / 1000, T2 / 1000) for (T1, T2) in sampled_pairs_ms]
+sampled_pairs_s = [(T1 / 1000.0, T2 / 1000.0) for (T1, T2) in sampled_pairs_ms]
 
 sys = Scanner()
 sim_params = KomaMRICore.default_sim_params()
@@ -89,7 +93,7 @@ num_entries = length(files)
 timepoints = 1000
 
 bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
-idx_bloch    = zeros(ComplexF32, num_entries, 2)
+idx_bloch = zeros(Float32, num_entries, 2)  
 
 for (j, file) in enumerate(files)
     filepath = joinpath(out_folder, file)
