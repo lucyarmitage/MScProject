@@ -1,31 +1,31 @@
 using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra, CUDA
 
-phantom_length = 7        # mm
-num_points = 11           # num sample points
-batch_size_pairs = 800      # phantoms per batch
+phantom_length = 10        # mm
+num_points = 101           # num sample points
+batch_size_pairs = 800    # phantoms per batch
 sliceOrientation = 1      # 1=coronal, 2=transverse, 3=sagittal
 
 seq = read_seq("sequences/mpf_001_PhantomStudy_short_124.seq")
 
-run_name = "$(phantom_length)mm_$(num_points)_short"
+out_file = "dict/test$(phantom_length)mm_$(num_points)_short.mat"
 
 phantom_length_m = phantom_length / 1000
 pos = collect(range(-phantom_length_m/2, phantom_length_m/2, length=num_points))
 
 zN = zeros(Float64, num_points)
 xvec, yvec, zvec = if sliceOrientation == 1
-    (pos, zN, zN)  
+    (pos, zN, zN)
 elseif sliceOrientation == 2
-    (zN, zN, pos)       
+    (zN, zN, pos)
 elseif sliceOrientation == 3
-    (zN, pos, zN)   
+    (zN, pos, zN)
 end
 
 function build_combined_phantom(pairs_chunk::AbstractVector{<:Tuple{<:Real,<:Real}})
     N = length(pairs_chunk) * num_points
-    x   = Vector{Float64}(undef, N)
-    y   = Vector{Float64}(undef, N)
-    z   = Vector{Float64}(undef, N)
+    x = Vector{Float64}(undef, N)
+    y = Vector{Float64}(undef, N)
+    z = Vector{Float64}(undef, N)
     T1v = Vector{Float64}(undef, N)
     T2v = Vector{Float64}(undef, N)
 
@@ -41,9 +41,6 @@ function build_combined_phantom(pairs_chunk::AbstractVector{<:Tuple{<:Real,<:Rea
     return Phantom{Float64}(x=x, y=y, z=z, T1=T1v, T2=T2v)
 end
 
-out_folder = joinpath("/vol/bitbucket/la724/progress", "test_$run_name")
-out_file = "dict/test_$run_name.mat"
-mkpath(out_folder)
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
 idx = read(f_idx, "idx"); close(f_idx)
@@ -64,14 +61,9 @@ for chunk_start in 1:batch_size_pairs:length(sampled_pairs_s)
     pairs_chunk = sampled_pairs_s[chunk_start:chunk_end]
     keys_chunk = [(Int(round(T1*1000)), Int(round(T2*1000))) for (T1, T2) in pairs_chunk]
 
-    if all(isfile(joinpath(out_folder, "signal_$(k[1])_$(k[2]).jld2")) for k in keys_chunk)
-        println("Skipping batch $chunk_start:$chunk_end")
-        continue
-    end
-
     big_phantom = build_combined_phantom(pairs_chunk)
 
-    @suppress sig_all = simulate(big_phantom, seq, sys; sim_params=sim_params)
+    sig_all = simulate(big_phantom, seq, sys; sim_params=sim_params)
     sig_clean_all = dropdims(sig_all; dims=(3,4))
 
     start_idx = 1
@@ -81,25 +73,18 @@ for chunk_start in 1:batch_size_pairs:length(sampled_pairs_s)
         start_idx += num_points
     end
 
-    for (key, sig) in batch_results
-        filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2]).jld2")
-        @save filepath key signal_mag=sig
-    end
-    println("Saved chunk $chunk_start:$chunk_end")
-    empty!(batch_results)
+    println("Processed chunk $chunk_start:$chunk_end")
 end
 
-files = readdir(out_folder)
-num_entries = length(files)
+files_keys = collect(keys(batch_results))
+num_entries = length(files_keys)
 timepoints = 1000
 
 bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
 idx_bloch = zeros(Float32, num_entries, 2)
 
-for (j, file) in enumerate(files)
-    filepath = joinpath(out_folder, file)
-    @load filepath key signal_mag
-    bloch_matrix[:, j] .= signal_mag
+for (j, key) in enumerate(files_keys)
+    bloch_matrix[:, j] .= batch_results[key]
     idx_bloch[j, :] .= key
 end
 
