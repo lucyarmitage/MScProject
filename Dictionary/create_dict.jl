@@ -89,7 +89,7 @@ num_entries = length(files)
 timepoints = 1000
 
 bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
-idx_bloch    = zeros(Int,        num_entries, 2)
+idx_bloch    = zeros(ComplexF32, num_entries, 2)
 
 for (j, file) in enumerate(files)
     filepath = joinpath(out_folder, file)
