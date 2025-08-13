@@ -101,8 +101,7 @@ sim_params["sim_method"] = BlochDict()
 sim_params["gpu"] = true
 
 
-
-## WARM UP
+# WARM UP
 warmup_pairs   = sampled_pairs_s[1:10]
 warmup_phantom = build_combined_phantom(warmup_pairs)
 @suppress _ = simulate(warmup_phantom, seq, sys; sim_params=sim_params)
@@ -112,11 +111,9 @@ CUDA.synchronize()
 runs_df = DataFrame(
     batch_size = Int[],
     repeat = Int[],
-    spins  = Int[],
     timepoints = Int[],
     samples = Int[],
     time_s = Float64[],
-    spins_per_s = Float64[],
     samples_per_s = Float64[],
     peak_mem_MB  = Float64[],
     avg_util_gpu = Float64[],
@@ -141,13 +138,12 @@ for bs in batch_sizes
         stop_gpu_monitor()
 
         timepoints = 1000
-        spins = bs * num_points
-        samples = timepoints * spins
+        samples = timepoints * bs * num_points
 
         peak_mem, avg_util, nsamples = summarise_gpu_log(logfile)
 
         push!(runs_df, (
-            bs, rep, spins, timepoints, samples, t_s,
+            bs, rep, samples, t_s,
             spins / t_s, samples / t_s, peak_mem, avg_util, nsamples
         ))
     end
@@ -155,25 +151,3 @@ end
 
 runs_csv = joinpath(log_dir, "gpu_bench_runs.csv")
 CSV.write(runs_csv, runs_df)
-
-summary_df = combine(groupby(runs_df, :batch_size)) do g
-    (;
-        n_repeats = nrow(g),
-        spins = first(g.spins),
-        timepoints = first(g.timepoints),
-        mean_time_s = mean(g.time_s),
-        median_time_s = median(g.time_s),
-        std_time_s = std(g.time_s),
-        best_time_s = minimum(g.time_s),
-        worst_time_s = maximum(g.time_s),
-        mean_spins_per_s = mean(g.spins_per_s),
-        median_spins_per_s = median(g.spins_per_s),
-        mean_samples_per_s = mean(g.samples_per_s),
-        median_samples_per_s = median(g.samples_per_s),
-        max_peak_mem_MB = maximum(g.peak_mem_MB),
-        mean_avg_util_gpu = mean(g.avg_util_gpu),
-    )
-end
-
-summary_csv = joinpath(log_dir, "gpu_bench_summary.csv")
-CSV.write(summary_csv, summary_df)
