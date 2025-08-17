@@ -6,10 +6,10 @@ T2prime_s = T2prime_ms / 1000.0
 
 phantom_length = 8
 num_points = 4001
-sliceOrientation = 2
+sliceOrientation = 1
 N_freq_samples = 15
 coverage = 0.99
-seq_file = "sequences/mpf_001_prostate_short_124.seq"
+seq_file = "sequences/mpf_001_PhantomStudy_124.seq"
 
 phantom_length_m = phantom_length / 1000
 pos = collect(range(-phantom_length_m/2, phantom_length_m/2, length=num_points))
@@ -64,12 +64,25 @@ sim_params["sim_method"] = BlochDict()
 sim_params["gpu"] = true
 seq = read_seq(seq_file)
 
-hwhm_hz = 1 / (2π * T2prime_s)
-lorentz = Cauchy(0.0, hwhm_hz)
-α = (1 - coverage) / 2
-u = range(α, 1 - α, length=N_freq_samples)
-Δf_values = quantile.(Ref(lorentz), u)
-Δω_values = 2π .* Δf_values
+function gauss_legendre_cauchy(γ_hz::Float64; N::Int, coverage::Float64)
+    α = (1 - coverage) / 2
+    a = π*(α - 0.5)
+    b = -a
+    β = [0.0; 0.5 ./ sqrt.(1 .- (2 .* (1:N-1)) .^ (-2))]
+    T = SymTridiagonal(zeros(N), β[2:end])
+    evals, evecs = eigen(T)
+    t̂ = evals
+    ŵ = 2 .* (evecs[1, :]) .^ 2
+    t = 0.5*(b-a) .* t̂ .+ 0.5*(b+a)
+    w_interval = 0.5*(b-a) .* ŵ
+    w_t = w_interval ./ (b - a)   # integrates to ~1 over [a,b]
+    f_hz = γ_hz .* tan.(t)
+    Δω = 2π .* f_hz    # rad/s
+    return Δω, w_t
+end
+
+γ_hz = 1 / (2π * T2prime_s)
+Δω_values, w_freq = gauss_legendre_cauchy(γ_hz; N=N_freq_samples, coverage=coverage)
 
 out_file = "dict/prostate_$(phantom_length)mm_$(num_points)_$(T2prime_ms)ms_short.mat"
 batch_results = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
@@ -82,10 +95,11 @@ for chunk_start in 1:batch_size_pairs:length(sampled_pairs_s)
     sig_all = @suppress simulate(big_phantom, seq, sys; sim_params=sim_params)
     sig_clean_all = dropdims(sig_all; dims=(3,4))
     spins_per_pair = num_points * length(Δω_values)
+    w_spins = repeat(w_freq, inner=num_points) ./ num_points  # frequency weights × uniform space average; sums to 1
     start_idx = 1
     for key in keys_chunk
-        sig_this = sig_clean_all[:, start_idx:start_idx + spins_per_pair - 1]
-        batch_results[key] = ComplexF32.(vec(sum(sig_this, dims=2)))
+        sig_this = sig_clean_all[:, start_idx:start_idx + spins_per_pair - 1] 
+        batch_results[key] = ComplexF32.(sig_this * w_spins)                    # weighted complex average over Δω and space
         start_idx += spins_per_pair
     end
     println("T2'=$(T2prime_ms) ms | Processed chunk $chunk_start:$chunk_end")
@@ -103,37 +117,3 @@ end
 mkpath(dirname(out_file))
 matwrite(out_file, Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
 println("Saved → $out_file")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
