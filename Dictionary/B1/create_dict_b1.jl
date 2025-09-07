@@ -1,95 +1,124 @@
-using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra, Printf
+using KomaMRI, MAT, Suppressor, JLD2, FileIO, LinearAlgebra, CUDA
 
-seq_folder = joinpath(@__DIR__, "b1_sequences")
-out_folder = joinpath("progress", "progress_10mm_101_short_b1")
-out_file = "blochdict_10mm_101_short_b1.mat"
-mkpath(out_folder)
+function build_combined_phantom(pairs_chunk::AbstractVector{<:Tuple{<:Real,<:Real}}, num_points, xvec, yvec, zvec)
+    N = length(pairs_chunk) * num_points
+    x  = Vector{Float64}(undef, N)
+    y  = Vector{Float64}(undef, N)
+    z  = Vector{Float64}(undef, N)
+    T1v = Vector{Float64}(undef, N)
+    T2v = Vector{Float64}(undef, N)
+
+    for (phantom_num, (T1, T2)) in enumerate(pairs_chunk)
+        spins = ((phantom_num-1)*num_points + 1):(phantom_num*num_points)
+        @views copyto!(x[spins], xvec)
+        @views copyto!(y[spins], yvec)
+        @views copyto!(z[spins], zvec)
+        @views fill!(T1v[spins], Float64(T1))
+        @views fill!(T2v[spins], Float64(T2))
+    end
+
+    return Phantom{Float64}(x=x, y=y, z=z, T1=T1v, T2=T2v)
+end
+
+phantom_length = 8
+num_points = 5001
+sliceOrientation = 1
+seq_file = "sequences/mpf_001_PhantomStudy_short_124.seq"
+timepoints = 1000
+batch_size_pairs = 120
+
+if length(ARGS) >= 1
+    b1_scale = parse(Float64, ARGS[1])
+end
+if length(ARGS) >= 2
+    phantom_length = parse(Float64, ARGS[2])
+end
+if length(ARGS) >= 3
+    num_points = parse(Int, ARGS[3])
+end
+if length(ARGS) >= 4
+    sliceOrientation = parse(Int, ARGS[4])
+end
+if length(ARGS) >= 5
+    timepoints = parse(Int, ARGS[5])
+end
+if length(ARGS) >= 6
+    seq_file = ARGS[6]
+end
+
+out_file = if length(ARGS) >= 7
+    ARGS[7]
+else
+    "dict_b1/dict_$(b1_scale)_$(phantom_length)mm_$(num_points)_short.mat"
+end
+
+mkpath(dirname(out_file))
+
+phantom_length_m = phantom_length / 1000
+pos = collect(range(-phantom_length_m/2, phantom_length_m/2, length=num_points))
+zN = zeros(Float64, num_points)
+
+xvec, yvec, zvec = if sliceOrientation == 1
+    (pos, zN, zN)
+elseif sliceOrientation == 2
+    (zN, zN, pos)
+elseif sliceOrientation == 3
+    (zN, pos, zN)
+else
+    error("Invalid sliceOrientation: $sliceOrientation")
+end
 
 f_idx = matopen("D_IDX_SP_Phantom2025.mat")
-idx = read(f_idx, "idx")
-close(f_idx)
-
+idx = read(f_idx, "idx"); close(f_idx)
 sampled_pairs_ms = [(row[1], row[2]) for row in eachrow(idx)]
 sampled_pairs_s  = [(T1 / 1000, T2 / 1000) for (T1, T2) in sampled_pairs_ms]
 
-sys = Scanner()
+seq_nom = read_seq(seq_file)
+seq     = (b1_scale + 0im) * seq_nom      # B1 SCALING
+sys     = Scanner()
+
 sim_params = KomaMRICore.default_sim_params()
 sim_params["return_type"] = "mat"
-sim_params["sim_method"] = BlochDict()
-sim_params["gpu"] = false
+sim_params["sim_method"]  = BlochDict()
+sim_params["gpu"] = true 
 
-x_pos = collect(range(-5e-3, 5e-3, length=101))
+batch_results = Dict{Tuple{Int, Int}, Vector{ComplexF32}}()
+for batch_start in 1:batch_size_pairs:length(sampled_pairs_s)
+    batch_end   = min(batch_start + batch_size_pairs - 1, length(sampled_pairs_s))
+    pairs_batch = sampled_pairs_s[batch_start:batch_end]
+    keys_batch  = [(Int(round(T1*1000)), Int(round(T2*1000))) for (T1, T2) in pairs_batch]
 
-batch = Dict{Tuple{Int, Int, Float64}, Vector{ComplexF32}}()
-batch_size = 50
+    big_phantom = build_combined_phantom(pairs_batch, num_points, xvec, yvec, zvec)
 
-seq_files = filter(f -> endswith(f, ".seq"), readdir(seq_folder))
+    sig_all = simulate(big_phantom, seq, sys; sim_params=sim_params)
+    sig_clean_all = dropdims(sig_all; dims=(3,4))
 
-for seq_file in seq_files
-    m = match(r"b1_(\d+\.\d+)", seq_file)
-    b1 = m === nothing ? 1.0 : parse(Float64, m.captures[1])
-    rounded_b1 = round(b1; digits=2)
-
-    println("Processing B1 = $rounded_b1 from $seq_file")
-    flush(stdout)
-
-    seq = read_seq(joinpath(seq_folder, seq_file))
-
-    for (i, (T1, T2)) in enumerate(sampled_pairs_s)
-        key = (Int(round(T1 * 1000)), Int(round(T2 * 1000)), rounded_b1)
-        filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2])_$(replace(string(rounded_b1), "." => "p")).jld2")
-
-        if isfile(filepath)
-            if i % 50 == 0
-                println("Skipping existing signal for $key (iteration $i)")
-                flush(stdout)
-            end
-            continue
-        end
-
-        obj = Phantom{Float64}(
-            x = x_pos,
-            y = zeros(length(x_pos)),
-            z = zeros(length(x_pos)),
-            T1 = fill(T1, length(x_pos)),
-            T2 = fill(T2, length(x_pos))
-        )
-
-        sig = nothing
-        @suppress sig = simulate(obj, seq, sys; sim_params=sim_params)
-
-        sig_clean = dropdims(sig; dims=(3,4))
-        signal_mag = vec(sum(sig_clean, dims=2))
-
-        batch[key] = signal_mag
-
-        if length(batch) >= batch_size || i == length(sampled_pairs_s)
-            for (key, sig) in batch
-                b1_str = replace(string(key[3]), "." => "p")
-                filepath = joinpath(out_folder, "signal_$(key[1])_$(key[2])_$(b1_str).jld2")
-                @save filepath key signal_mag=sig
-            end
-            println("Saved batch at iteration $i (size: $(length(batch))) for B1 = $rounded_b1")
-            flush(stdout)
-            empty!(batch)
-        end
+    start_idx = 1
+    for key in keys_batch
+        sig_this = sig_clean_all[:, start_idx:start_idx + num_points - 1]
+        batch_results[key] = vec(sum(sig_this, dims=2))
+        start_idx += num_points
     end
 end
 
-files = filter(f -> endswith(f, ".jld2"), readdir(out_folder))
-num_entries = length(files)
-timepoints = 1000
+files_keys = sort(collect(keys(batch_results)))
+num_entries = length(files_keys)
 
-bloch_matrix = zeros(ComplexF32, timepoints, num_entries)
-idx_bloch = zeros(Float64, num_entries, 3)  # [T1, T2, B1]
+Nt_sim = length(batch_results[files_keys[1]])
+Nt_use = min(timepoints, Nt_sim)
 
-for (j, file) in enumerate(files)
-    filepath = joinpath(out_folder, file)
-    @load filepath key signal_mag
-    bloch_matrix[:, j] .= signal_mag
+bloch_matrix = zeros(ComplexF32, Nt_use, num_entries)
+idx_bloch    = zeros(Float32, num_entries, 3)
+
+for (j, key) in enumerate(files_keys)
+    sig = batch_results[key]
+    bloch_matrix[:, j] .= sig[1:Nt_use]
     idx_bloch[j, 1] = key[1]
-    idx_bloch[j, 2] = key[2]
-    idx_bloch[j, 3] = key[3]
+    idx_bloch[j, 2] = key[2] 
+    idx_bloch[j, 3] = Float32(b1_scale)
 end
 
-matwrite(out_file, Dict("dict0" => bloch_matrix, "idx" => idx_bloch))
+matwrite(out_file, Dict(
+    "dict0"       => bloch_matrix,
+    "idx"         => idx_bloch,         
+))
