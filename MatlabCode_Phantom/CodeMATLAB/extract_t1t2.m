@@ -2,8 +2,8 @@ clear;
 
 folder = 'C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/recon_results';
 addpath(genpath('C:/Users/lucya/MSC_PROJECT/MatlabCode_Phantom/CodeMATLAB/utils'));
-load(fullfile(folder, 'new_10mm_501_short.mat'));
-load('vial_mask_geometry.mat');  % centres, radii
+load(fullfile(folder, '8mm_4001_short.mat'));
+load('vial_mask.mat');  % centres, radii
 
 Qmaps = reshape(D.lookup_table(idx2,:),[[N N 1], size(D.lookup_table,2)]);
 Qmaps = cat(numel(size(Qmaps)),Qmaps,reshape(c ./ D.normalization(idx2).',[N N]));
@@ -70,60 +70,3 @@ for k = 1:nVials
          'HorizontalAlignment','center');
 end
 hold off;
-
-figure; 
-hImg = imagesc(magImg); axis image; colormap hot; colorbar;
-title('Click on pixel to view T1/T2 values');
-
-dcm = datacursormode(gcf);
-set(dcm, 'Enable', 'on', ...
-         'DisplayStyle', 'datatip', ...
-         'SnapToDataVertex', 'on', ...
-         'UpdateFcn', {@myTooltipFunction, T1, T2});
-
-
-disp('Click');
-
-
-function txt = myTooltipFunction(~, event_obj, T1, T2)
-    pos = get(event_obj, 'Position');
-    x = round(pos(1));
-    y = round(pos(2));
-
-    if y >= 1 && y <= size(T1, 1) && x >= 1 && x <= size(T1, 2)
-        t1_val = T1(y, x);
-        t2_val = T2(y, x);
-        txt = {
-            ['X: ', num2str(x)], ...
-            ['Y: ', num2str(y)], ...
-            ['T1: ', num2str(t1_val, '%.1f'), ' ms'], ...
-            ['T2: ', num2str(t2_val, '%.1f'), ' ms']
-        };
-    else
-        txt = {'Out of bounds'};
-    end
-end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% --- Pick a pixel and report its index ---
-[x_click, y_click] = ginput(1);
-x = round(x_click);
-y = round(y_click);
-pixel_idx = sub2ind([N, N], y, x);  % Make sure N matches actual image size
-
-fprintf('You selected pixel (x = %d, y = %d)\n', x, y);
-fprintf('Linear index (pixel_idx) = %d\n', pixel_idx);
-
