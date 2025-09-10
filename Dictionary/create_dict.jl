@@ -57,7 +57,7 @@ else
     out_file = "dict/dict_$(phantom_length)mm_$(num_points)_short.mat"
 end
 
-batch_size_pairs = Int(floor(150_000 / num_points))    # Assuming 16 GB
+batch_size_pairs = Int(floor(240000 / num_points))    # Assuming 16 GB
 
 # Single phantom
 phantom_length_m = phantom_length / 1000
